@@ -1,8 +1,8 @@
 # CO₂ – Progressive Alerts (multi-device, area-aware, cooldown, “only-if-home” toggle)
 
-[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](./blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fjubnl%2Fha-blueprints%2Fblob%2Fmain%2Fair%2520quality%2Fha_ppm_threshold_notification.yaml)
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgist.github.com%2Fjubnl%2F25ef574395ba8fe4535311f24e866489)
 
-[GitHub Link Click Here](https://github.com/jubnl/ha-blueprints/blob/main/air%20quality/ha_ppm_threshold_notification.yaml)
+[GitHub Link Click Here for Issues](https://github.com/jubnl/ha-blueprints/blob/main/air%20quality/ha_ppm_threshold_notification.yaml)
 
 **TL;DR**  
 A robust CO₂ alert blueprint that:
