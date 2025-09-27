@@ -1,0 +1,318 @@
+blueprint:
+  name: CO₂ – Progressive alerts (multi-device, only-if-home toggle) + Debug
+  description: >
+    Progressive CO₂ alerts with durations + cooldown.
+    Notifies selected Companion App devices ONLY if their device_tracker is 'home' (configurable).
+    Uses notify entities when available, otherwise falls back to legacy notify.mobile_app_<slug>.
+    Includes detailed Logbook logging for debugging. Adds sensor area to the notification title when available.
+  domain: automation
+  input:
+    co2_sensor:
+      name: CO₂ sensor
+      selector:
+        entity:
+          domain: sensor
+          device_class: carbon_dioxide
+
+    mobile_devices:
+      name: Mobile app devices
+      description: Select one or more Companion App devices.
+      default: []
+      selector:
+        device:
+          multiple: true
+          filter:
+            - integration: mobile_app
+
+    notify_entities:
+      name: Notify entities (optional)
+      description: One or more notify entities (notify group, Telegram, HTML5, etc.).
+      default: []
+      selector:
+        entity:
+          multiple: true
+          domain: notify
+
+    notify_only_if_home:
+      name: Notify only if devices are at home
+      description: If enabled, Companion App devices are notified only when their device_tracker is 'home'.
+      default: true
+      selector:
+        boolean: {}
+
+    warn_threshold:
+      name: Warn threshold (ppm)
+      default: 1000
+      selector:
+        number: { min: 200, max: 3000, step: 50, unit_of_measurement: ppm }
+    warn_for:
+      name: Warn "for" (minutes)
+      default: 5
+      selector:
+        number: { min: 0, max: 60, step: 1 }
+
+    alert_threshold:
+      name: Alert threshold (ppm)
+      default: 1400
+      selector:
+        number: { min: 300, max: 4000, step: 50, unit_of_measurement: ppm }
+    alert_for:
+      name: Alert "for" (minutes)
+      default: 3
+      selector:
+        number: { min: 0, max: 60, step: 1 }
+
+    critical_threshold:
+      name: Critical threshold (ppm)
+      default: 2000
+      selector:
+        number: { min: 400, max: 6000, step: 50, unit_of_measurement: ppm }
+    critical_for:
+      name: Critical "for" (minutes)
+      default: 1
+      selector:
+        number: { min: 0, max: 60, step: 1 }
+
+    cooldown_minutes:
+      name: Cooldown between notifications (minutes)
+      default: 15
+      selector:
+        number: { min: 0, max: 240, step: 1 }
+
+    debug_enabled:
+      name: Debug logging to Logbook
+      default: true
+      selector:
+        boolean: {}
+
+mode: restart
+
+variables:
+  co2: !input co2_sensor
+  warn: !input warn_threshold
+  alert: !input alert_threshold
+  critical: !input critical_threshold
+  cooldown_m: !input cooldown_minutes
+  mobile_devices: !input mobile_devices
+  notify_entities: !input notify_entities
+  notify_only_if_home: !input notify_only_if_home
+  debug_enabled: !input debug_enabled
+
+trigger:
+  - id: warn
+    platform: numeric_state
+    entity_id: !input co2_sensor
+    above: !input warn_threshold
+    for: { minutes: !input warn_for }
+
+  - id: alert
+    platform: numeric_state
+    entity_id: !input co2_sensor
+    above: !input alert_threshold
+    for: { minutes: !input alert_for }
+
+  - id: critical
+    platform: numeric_state
+    entity_id: !input co2_sensor
+    above: !input critical_threshold
+    for: { minutes: !input critical_for }
+
+action:
+  - variables:
+      ppm: "{{ states(co2) | float(0) }}"
+      level_msg: >-
+        {% if trigger.id == 'critical' %}CRITICAL
+        {% elif trigger.id == 'alert' %}ALERT
+        {% else %}WARN{% endif %}
+
+      # Area in title (entity area first, then device area)
+      co2_area: >-
+        {% set a = area_name(co2) %}
+        {% if a %}{{ a }}
+        {% else %}
+          {% set dev = device_id(co2) %}
+          {% if dev %}{{ area_name(dev) }}{% endif %}
+        {% endif %}
+      title: >-
+        Air quality{% if co2_area %} — {{ co2_area }}{% endif %}
+      body: >-
+        CO₂ {{ level_msg }} — {{ ppm|round(0) }} ppm. Ventilate (open windows/doors).
+
+      # Cooldown using timestamps
+      last_raw: "{{ state_attr(this.entity_id, 'last_triggered') }}"
+      last_ts: "{{ as_timestamp(last_raw) }}"
+      now_iso: "{{ now() }}"
+      now_ts: "{{ as_timestamp(now()) }}"
+      seconds_since: >-
+        {% if last_ts %}{{ (now_ts - last_ts) | int }}{% else %}-1{% endif %}
+      cooldown_s: "{{ (cooldown_m | int(0)) * 60 }}"
+      cooldown_ok: >-
+        {% if not last_ts %}true{% else %}
+        {{ (now_ts - last_ts) > (cooldown_m | int(0) * 60) }}
+        {% endif %}
+
+  - if:
+      - condition: template
+        value_template: "{{ debug_enabled }}"
+    then:
+      - service: logbook.log
+        data:
+          name: "CO₂ Automation"
+          entity_id: "{{ co2 }}"
+          message: >-
+            Trigger={{ trigger.id }} | ppm={{ ppm|round(0) }} |
+            thresholds: warn={{ warn }}, alert={{ alert }}, critical={{ critical }} |
+            area={{ co2_area if co2_area else 'none' }} |
+            now_iso={{ now_iso }} | last_raw={{ last_raw if last_raw else 'none' }} |
+            seconds_since={{ seconds_since }} | cooldown_ok={{ cooldown_ok }} |
+            notify_only_if_home={{ notify_only_if_home }} |
+            mobile_devices={{ mobile_devices | tojson }} |
+            notify_entities={{ notify_entities | tojson }}
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ cooldown_ok | bool }}"
+        sequence:
+
+          # ---------- Per-device processing ----------
+          - repeat:
+              for_each: "{{ mobile_devices }}"
+              sequence:
+                - variables:
+                    dev_id: "{{ repeat.item }}"
+                    ents: "{{ device_entities(dev_id) | list }}"
+                    trackers: "{{ ents | select('match','^device_tracker\\.') | list }}"
+                    tracker: "{{ trackers | first if trackers else none }}"
+                    tracker_state: "{{ states(tracker) if tracker else 'n/a' }}"
+                    dev_notif_ents: "{{ ents | select('match','^notify\\.') | list }}"
+                    dev_notify_ent: "{{ dev_notif_ents | first if dev_notif_ents else none }}"
+                    tracker_slug: "{{ tracker.split('.')[1] if tracker else '' }}"
+                    name_slug: "{{ device_attr(dev_id, 'name') | slugify if device_attr(dev_id, 'name') else '' }}"
+                    service_slug: "{{ tracker_slug if tracker_slug else name_slug }}"
+                    legacy_service: "{{ 'notify.mobile_app_' ~ service_slug if service_slug else '' }}"
+                    should_notify_device: >-
+                      {% if notify_only_if_home %}
+                        {{ tracker is not none and tracker_state == 'home' }}
+                      {% else %}
+                        true
+                      {% endif %}
+                - if:
+                    - condition: template
+                      value_template: "{{ debug_enabled }}"
+                  then:
+                    - service: logbook.log
+                      data:
+                        name: "CO₂ Automation"
+                        entity_id: "{{ co2 }}"
+                        message: >-
+                          Device={{ dev_id }} |
+                          tracker={{ tracker if tracker else 'none' }} state={{ tracker_state }} |
+                          dev_notify_ent={{ dev_notify_ent if dev_notify_ent else 'none' }} |
+                          slug: tracker='{{ tracker_slug }}' name='{{ name_slug }}' service='{{ service_slug }}' |
+                          legacy_service='{{ legacy_service }}' |
+                          should_notify_device={{ should_notify_device }}
+
+                - choose:
+                    - conditions:
+                        - condition: template
+                          value_template: "{{ should_notify_device | bool }}"
+                      sequence:
+                        # Prefer notify entity on the device
+                        - choose:
+                            - conditions:
+                                - condition: template
+                                  value_template: "{{ dev_notify_ent is not none }}"
+                              sequence:
+                                - if:
+                                    - condition: template
+                                      value_template: "{{ debug_enabled }}"
+                                  then:
+                                    - service: logbook.log
+                                      data:
+                                        name: "CO₂ Automation"
+                                        entity_id: "{{ co2 }}"
+                                        message: >-
+                                          Notifying via entity '{{ dev_notify_ent }}' | title='{{ title }}'
+                                - service: notify.send_message
+                                  target:
+                                    entity_id: "{{ dev_notify_ent }}"
+                                  data:
+                                    title: "{{ title }}"
+                                    message: "{{ body }}"
+                            # Fallback to legacy service name
+                            - conditions:
+                                - condition: template
+                                  value_template: "{{ dev_notify_ent is none and legacy_service != '' }}"
+                              sequence:
+                                - if:
+                                    - condition: template
+                                      value_template: "{{ debug_enabled }}"
+                                  then:
+                                    - service: logbook.log
+                                      data:
+                                        name: "CO₂ Automation"
+                                        entity_id: "{{ co2 }}"
+                                        message: >-
+                                          Notifying via legacy service '{{ legacy_service }}' | title='{{ title }}'
+                                - service: "{{ legacy_service }}"
+                                  data:
+                                    title: "{{ title }}"
+                                    message: "{{ body }}"
+                    - conditions:
+                        - condition: template
+                          value_template: "{{ not (should_notify_device | bool) }}"
+                      sequence:
+                        - if:
+                            - condition: template
+                              value_template: "{{ debug_enabled }}"
+                          then:
+                            - service: logbook.log
+                              data:
+                                name: "CO₂ Automation"
+                                entity_id: "{{ co2 }}"
+                                message: >-
+                                  Skip device {{ dev_id }} (gate=only_if_home, not 'home' or no tracker).
+
+          # ---------- Additional notify.* entities ----------
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ notify_entities | length > 0 }}"
+                sequence:
+                  - if:
+                      - condition: template
+                        value_template: "{{ debug_enabled }}"
+                    then:
+                      - service: logbook.log
+                        data:
+                          name: "CO₂ Automation"
+                          entity_id: "{{ co2 }}"
+                          message: >-
+                            Notifying extra entities: {{ notify_entities | tojson }} | title='{{ title }}'
+                  - service: notify.send_message
+                    target:
+                      entity_id: !input notify_entities
+                    data:
+                      title: "{{ title }}"
+                      message: "{{ body }}"
+
+      # ---------- Cooldown blocked ----------
+      - conditions:
+          - condition: template
+            value_template: "{{ not (cooldown_ok | bool) }}"
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ debug_enabled }}"
+            then:
+              - service: logbook.log
+                data:
+                  name: "CO₂ Automation"
+                  entity_id: "{{ co2 }}"
+                  message: >-
+                    Cooldown active; blocking notifications.
+                    last_raw={{ last_raw if last_raw else 'none' }},
+                    seconds_since={{ seconds_since }},
+                    required>{{ cooldown_s }}
+          - stop: "Cooldown active; notifications suppressed."
