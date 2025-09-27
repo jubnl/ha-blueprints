@@ -81,7 +81,7 @@ blueprint:
 
     debug_enabled:
       name: Debug logging to Logbook
-      default: true
+      default: false
       selector:
         boolean: {}
 
