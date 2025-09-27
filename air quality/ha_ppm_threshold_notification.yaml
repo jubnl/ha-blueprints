@@ -44,7 +44,7 @@ blueprint:
       name: Warn threshold (ppm)
       default: 1000
       selector:
-        number: { min: 200, max: 3000, step: 50, unit_of_measurement: ppm }
+        number: { min: 600, max: 3000, step: 50, unit_of_measurement: ppm }
     warn_for:
       name: Warn "for" (minutes)
       default: 5
@@ -55,7 +55,7 @@ blueprint:
       name: Alert threshold (ppm)
       default: 1400
       selector:
-        number: { min: 300, max: 4000, step: 50, unit_of_measurement: ppm }
+        number: { min: 800, max: 4000, step: 50, unit_of_measurement: ppm }
     alert_for:
       name: Alert "for" (minutes)
       default: 3
@@ -66,7 +66,7 @@ blueprint:
       name: Critical threshold (ppm)
       default: 2000
       selector:
-        number: { min: 400, max: 6000, step: 50, unit_of_measurement: ppm }
+        number: { min: 1200, max: 6000, step: 50, unit_of_measurement: ppm }
     critical_for:
       name: Critical "for" (minutes)
       default: 1
