@@ -1,5 +1,5 @@
 blueprint:
-  name: CO₂ – Progressive alerts (multi-device, only-if-home toggle) + Debug
+  name: CO₂ – Progressive alerts (multi-device, only-if-home toggle)
   description: >
     Progressive CO₂ alerts with durations + cooldown.
     Notifies selected Companion App devices ONLY if their device_tracker is 'home' (configurable).
