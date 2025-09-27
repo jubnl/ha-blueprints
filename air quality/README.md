@@ -48,7 +48,7 @@ A robust CO₂ alert blueprint that:
 | **Alert threshold / for**              | `number` / `minutes`                         | `1400` / `3` | Second level                                       |
 | **Critical threshold / for**           | `number` / `minutes`                         | `2000` / `1` | Third level                                        |
 | **Cooldown (minutes)**                 | `number`                                     |         `15` | Minimum gap between any two sends                  |
-| **Debug logging to Logbook**           | `boolean`                                    |       `true` | Verbose Logbook traces everywhere                  |
+| **Debug logging to Logbook**           | `boolean`                                    |      `false` | Verbose Logbook traces everywhere                  |
 
 ---
 
