@@ -4,6 +4,8 @@
 
 [GitHub Link Click Here for Issues](https://github.com/jubnl/ha-blueprints/blob/main/air%20quality/ha_ppm_threshold_notification.yaml)
 
+[Gist Link Click Here](https://gist.github.com/jubnl/25ef574395ba8fe4535311f24e866489)
+
 **TL;DR**  
 A robust CO₂ alert blueprint that:
 
